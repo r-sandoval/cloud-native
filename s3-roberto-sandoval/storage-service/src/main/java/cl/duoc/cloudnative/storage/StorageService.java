@@ -149,7 +149,7 @@ public class StorageService {
         s3.deleteObject(DeleteObjectRequest.builder().bucket(bucket).key(key).build());
     }
 
-    public Map<String, Long> countByEvento(String eventoId) {
+    public Map<String, Object> countByEvento(String eventoId) {
         checkId(eventoId, "Evento inválido");
         String prefix = "eventos/" + eventoId + "/";
         ListObjectsV2Request request = ListObjectsV2Request.builder().bucket(bucket).prefix(prefix).build();

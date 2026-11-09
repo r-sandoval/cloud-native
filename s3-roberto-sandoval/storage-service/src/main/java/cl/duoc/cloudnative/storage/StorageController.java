@@ -50,7 +50,7 @@ public class StorageController {
     }
 
     @GetMapping("/stats/{eventoId}")
-    public Map<String, Long> stats(@PathVariable String eventoId) {
+    public Map<String, Object> stats(@PathVariable String eventoId) {
         return service.countByEvento(eventoId);
     }
 
