@@ -105,16 +105,20 @@ public class StorageService {
     public Map<String, String> update(MultipartFile file, String eventoId, String usuarioId, String filename) throws IOException {
         checkId(eventoId, "Evento inválido");
         checkId(usuarioId, "Usuario inválido");
+
         if (!filename.matches("ticket-[a-f0-9-]{36}\\.pdf")) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Nombre inválido");
         }
+
         if (file.isEmpty() || file.getSize() > 10 * 1024 * 1024) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "PDF vacío o demasiado grande");
         }
+
         byte[] header = file.getInputStream().readNBytes(5);
-        if (!Arrays.equals(header, new byte[]{x27%x27, x27Px27, x27Dx27, x27Fx27, x27-x27})) {
+        if (!Arrays.equals(header, new byte[]{'%', 'P', 'D', 'F', '-'})) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Se requiere PDF");
         }
+
         String key = "eventos/" + eventoId + "/usuarios/" + usuarioId + "/" + filename;
         Path path = Files.createTempFile(temporary, "ticket-", ".pdf");
         try {
@@ -124,6 +128,7 @@ public class StorageService {
         } finally {
             Files.deleteIfExists(path);
         }
+
         return Map.of(
                 "eventoId", eventoId,
                 "usuarioId", usuarioId,
