@@ -65,6 +65,27 @@ public class DocumentController {
                 .body(file);
     }
 
+    @PutMapping("/{eventoId}/{usuarioId}/{filename:.+}")
+    public ResponseEntity<Map> update(@PathVariable String eventoId,
+                                      @PathVariable String usuarioId,
+                                      @PathVariable String filename,
+                                      @RequestPart("file") MultipartFile file) throws Exception {
+        ByteArrayResource resource = new ByteArrayResource(file.getBytes()) {
+            @Override
+            public String getFilename() {
+                return filename;
+            }
+        };
+        MultiValueMap<String, Object> form = new LinkedMultiValueMap<>();
+        form.add("file", resource);
+        Map result = storage.put()
+                .uri(b -> b.path("/internal/storage/{eventoId}/{usuarioId}/{filename}")
+                        .build(eventoId, usuarioId, filename))
+                .contentType(MediaType.MULTIPART_FORM_DATA)
+                .body(form).retrieve().body(Map.class);
+        return ResponseEntity.ok(result);
+    }
+
     @GetMapping("/list/{eventoId}")
     public List<Map<String, String>> listByEvento(@PathVariable String eventoId) {
         return storage.get()

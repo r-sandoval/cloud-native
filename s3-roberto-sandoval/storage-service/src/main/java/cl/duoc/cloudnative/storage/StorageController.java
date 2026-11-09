@@ -33,6 +33,14 @@ public class StorageController {
                 .body(service.load(eventoId, usuarioId, filename));
     }
 
+    @PutMapping(value = "/{eventoId}/{usuarioId}/{filename:.+}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public Map<String, String> update(@RequestPart("file") MultipartFile file,
+                                      @PathVariable String eventoId,
+                                      @PathVariable String usuarioId,
+                                      @PathVariable String filename) throws IOException {
+        return service.update(file, eventoId, usuarioId, filename);
+    }
+
     @GetMapping("/list/{eventoId}")
     public List<Map<String, String>> listByEvento(@PathVariable String eventoId) {
         return service.listByEvento(eventoId);
