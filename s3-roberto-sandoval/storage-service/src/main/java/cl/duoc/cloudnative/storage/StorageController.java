@@ -41,6 +41,19 @@ public class StorageController {
         return service.update(file, eventoId, usuarioId, filename);
     }
 
+    @DeleteMapping("/{eventoId}/{usuarioId}/{filename:.+}")
+    public ResponseEntity<Void> delete(@PathVariable String eventoId,
+                                       @PathVariable String usuarioId,
+                                       @PathVariable String filename) {
+        service.delete(eventoId, usuarioId, filename);
+        return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/stats/{eventoId}")
+    public Map<String, Long> stats(@PathVariable String eventoId) {
+        return service.countByEvento(eventoId);
+    }
+
     @GetMapping("/list/{eventoId}")
     public List<Map<String, String>> listByEvento(@PathVariable String eventoId) {
         return service.listByEvento(eventoId);

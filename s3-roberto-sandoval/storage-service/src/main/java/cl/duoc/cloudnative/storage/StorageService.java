@@ -139,6 +139,25 @@ public class StorageService {
         );
     }
 
+    public void delete(String eventoId, String usuarioId, String filename) {
+        checkId(eventoId, "Evento inválido");
+        checkId(usuarioId, "Usuario inválido");
+        if (!filename.matches("ticket-[a-f0-9-]{36}\\.pdf")) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Nombre inválido");
+        }
+        String key = "eventos/" + eventoId + "/usuarios/" + usuarioId + "/" + filename;
+        s3.deleteObject(DeleteObjectRequest.builder().bucket(bucket).key(key).build());
+    }
+
+    public Map<String, Long> countByEvento(String eventoId) {
+        checkId(eventoId, "Evento inválido");
+        String prefix = "eventos/" + eventoId + "/";
+        ListObjectsV2Request request = ListObjectsV2Request.builder().bucket(bucket).prefix(prefix).build();
+        ListObjectsV2Response response = s3.listObjectsV2(request);
+        long count = response.contents().stream().filter(obj -> obj.key().endsWith(".pdf")).count();
+        return Map.of("eventoId", eventoId, "totalTickets", count);
+    }
+
     private void checkId(String id, String message) {
         if (!id.matches("[A-Za-z0-9_-]{1,50}")) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, message);

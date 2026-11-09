@@ -87,6 +87,24 @@ public class DocumentController {
         return ResponseEntity.ok(result);
     }
 
+    @DeleteMapping("/{eventoId}/{usuarioId}/{filename:.+}")
+    public ResponseEntity<Void> delete(@PathVariable String eventoId,
+                                       @PathVariable String usuarioId,
+                                       @PathVariable String filename) {
+        storage.delete()
+                .uri(b -> b.path("/internal/storage/{eventoId}/{usuarioId}/{filename}")
+                        .build(eventoId, usuarioId, filename))
+                .retrieve().toBodilessEntity();
+        return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/stats/{eventoId}")
+    public Map<String, Long> stats(@PathVariable String eventoId) {
+        return storage.get()
+                .uri("/internal/storage/stats/{eventoId}", eventoId)
+                .retrieve().body(Map.class);
+    }
+
     @GetMapping("/list/{eventoId}")
     public List<Map<String, String>> listByEvento(@PathVariable String eventoId) {
         return storage.get()
