@@ -99,7 +99,7 @@ public class DocumentController {
     }
 
     @GetMapping("/stats/{eventoId}")
-    public Map<String, Long> stats(@PathVariable String eventoId) {
+    public Map<String, Object> stats(@PathVariable String eventoId) {
         return storage.get()
                 .uri("/internal/storage/stats/{eventoId}", eventoId)
                 .retrieve().body(Map.class);
