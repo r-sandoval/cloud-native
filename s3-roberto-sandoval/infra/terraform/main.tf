@@ -18,10 +18,6 @@ data "aws_ssm_parameter" "al2023" {
   name = "/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64"
 }
 
-data "tls_certificate" "github" {
-  url = "https://token.actions.githubusercontent.com"
-}
-
 resource "random_id" "suffix" {
   byte_length = 4
 }
@@ -35,6 +31,12 @@ resource "aws_s3_bucket" "documents" {
   bucket        = local.bucket
   force_destroy = false
   tags          = { Project = local.name }
+
+  lifecycle {
+    ignore_changes = [
+      object_lock_enabled,
+    ]
+  }
 }
 
 resource "aws_s3_bucket_public_access_block" "documents" {
@@ -71,6 +73,13 @@ resource "aws_security_group" "ec2" {
     protocol    = "tcp"
     cidr_blocks = [var.allowed_api_cidr]
   }
+  ingress {
+    description = "SSH para pipeline"
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
   egress {
     from_port   = 0
     to_port     = 0
@@ -103,46 +112,16 @@ resource "aws_efs_file_system" "shared" {
   tags            = { Name = "${local.name}-efs" }
 }
 
-# Una sola interfaz EFS por AZ, aunque existan multiples subredes de la misma AZ.
 resource "aws_efs_mount_target" "shared" {
-  for_each       = { for s in values(data.aws_subnet.selected) : s.availability_zone => s.id... }
-  file_system_id = aws_efs_file_system.shared.id
-  subnet_id      = each.value[0]
+  for_each        = { for s in values(data.aws_subnet.selected) : s.availability_zone => s.id... }
+  file_system_id  = aws_efs_file_system.shared.id
+  subnet_id       = each.value[0]
   security_groups = [aws_security_group.efs.id]
 }
 
-resource "aws_iam_role" "ec2" {
-  name = "${local.name}-instance-${random_id.suffix.hex}"
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Effect    = "Allow"
-      Principal = { Service = "ec2.amazonaws.com" }
-      Action    = "sts:AssumeRole"
-    }]
-  })
-}
-
-resource "aws_iam_role_policy_attachment" "ssm" {
-  role       = aws_iam_role.ec2.name
-  policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
-}
-
-resource "aws_iam_role_policy" "bucket" {
-  role = aws_iam_role.ec2.id
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Effect   = "Allow"
-      Action   = ["s3:PutObject", "s3:GetObject"]
-      Resource = "${aws_s3_bucket.documents.arn}/clientes/*"
-    }]
-  })
-}
-
-resource "aws_iam_instance_profile" "ec2" {
-  name = "${local.name}-${random_id.suffix.hex}"
-  role = aws_iam_role.ec2.name
+resource "aws_key_pair" "deployer" {
+  key_name   = "cdy2204-semana3-key"
+  public_key = file("~/.ssh/cdy2204-semana3.pub")
 }
 
 resource "aws_instance" "app" {
@@ -150,7 +129,8 @@ resource "aws_instance" "app" {
   instance_type               = var.instance_type
   subnet_id                   = values(data.aws_subnet.selected)[0].id
   vpc_security_group_ids      = [aws_security_group.ec2.id]
-  iam_instance_profile        = aws_iam_instance_profile.ec2.name
+  iam_instance_profile        = "LabInstanceProfile"
+  key_name                    = aws_key_pair.deployer.key_name
   associate_public_ip_address = true
   user_data = templatefile("${path.module}/user-data.sh.tftpl", {
     efs_id = aws_efs_file_system.shared.id
@@ -164,48 +144,4 @@ resource "aws_instance" "app" {
     encrypted   = true
   }
   tags = { Name = "${local.name}-app", Project = local.name }
-}
-
-# CUIDADO: solo puede existir un proveedor OIDC GitHub por cuenta AWS.
-resource "aws_iam_openid_connect_provider" "github" {
-  url             = "https://token.actions.githubusercontent.com"
-  client_id_list  = ["sts.amazonaws.com"]
-  thumbprint_list = [data.tls_certificate.github.certificates[0].sha1_fingerprint]
-}
-
-resource "aws_iam_role" "deploy" {
-  name = "${local.name}-deploy-${random_id.suffix.hex}"
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Effect    = "Allow"
-      Principal = { Federated = aws_iam_openid_connect_provider.github.arn }
-      Action    = "sts:AssumeRoleWithWebIdentity"
-      Condition = {
-        StringEquals = {
-          "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com"
-          "token.actions.githubusercontent.com:sub" = "repo:${var.github_repo}:environment:${var.github_environment}"
-        }
-      }
-    }]
-  })
-}
-
-resource "aws_iam_role_policy" "deploy" {
-  role = aws_iam_role.deploy.id
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect   = "Allow"
-        Action   = ["ssm:SendCommand"]
-        Resource = ["arn:aws:ssm:${var.region}::document/AWS-RunShellScript", aws_instance.app.arn]
-      },
-      {
-        Effect   = "Allow"
-        Action   = ["ssm:GetCommandInvocation"]
-        Resource = "*"
-      }
-    ]
-  })
 }
