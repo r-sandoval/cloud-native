@@ -1,33 +1,26 @@
 #!/bin/bash
 set -euxo pipefail
-exec > >(tee /var/log/cdy2204-bootstrap.log) 2>&1
-dnf install -y docker amazon-efs-utils curl
-mkdir -p /usr/local/lib/docker/cli-plugins
-curl -fL --retry 3 https://github.com/docker/compose/releases/download/v2.32.4/docker-compose-linux-x86_64 -o /usr/local/lib/docker/cli-plugins/docker-compose
-chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
-systemctl enable --now docker
-mkdir -p /mnt/efs/cloudnative /opt/cloudnative
-printf '%s:/ /mnt/efs efs _netdev,tls 0 0\n' '${efs_id}' >> /etc/fstab
-# AWS EFS mount helper uses the instance role/network connectivity.
+
+# Instalar Docker
+yum update -y
+yum install -y docker
+systemctl start docker
+systemctl enable docker
+usermod -aG docker ec2-user
+
+# Instalar Docker Compose
+curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+chmod +x /usr/local/bin/docker-compose
+
+# Montar EFS
+mkdir -p /mnt/efs
+echo "${efs_id}.efs.${region}.amazonaws.com:/ /mnt/efs nfs4 nfsvers=4.1,rsize=1048576,wsize=1048576,hard,timeo=600,retrans=2,noresvport,_netdev 0 0" >> /etc/fstab
 mount -a
-chmod 777 /mnt/efs/cloudnative
-# Acotar permisos en un entorno productivo con EFS Access Points.
-cat > /opt/cloudnative/docker-compose.aws.yml <<'YAML'
-services:
-  storage:
-    image: $${DOCKERHUB_USER}/cloudnative-storage:$${IMAGE_TAG}
-    restart: unless-stopped
-    environment:
-      AWS_REGION: $${AWS_REGION}
-      S3_BUCKET: $${S3_BUCKET}
-      EFS_PATH: /mnt/efs
-    volumes:
-      - /mnt/efs/cloudnative:/mnt/efs
-  documents:
-    image: $${DOCKERHUB_USER}/cloudnative-documents:$${IMAGE_TAG}
-    restart: unless-stopped
-    ports: ["8080:8080"]
-    environment:
-      STORAGE_SERVICE_URL: http://storage:8081
-    depends_on: [storage]
-YAML
+
+# Permisos para EFS
+chown 999:999 /mnt/efs
+chmod 750 /mnt/efs
+
+# Crear carpeta para el despliegue
+mkdir -p /home/ec2-user/cloudnative
+chown ec2-user:ec2-user /home/ec2-user/cloudnative
